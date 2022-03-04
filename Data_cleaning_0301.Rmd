@@ -1,0 +1,270 @@
+---
+title: "Data_cleaning"
+author: "Aidan Wong"
+date: '2022-02-27'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# install.packages("tidyverse")
+# install.packages("lubridate")
+library("lubridate")
+library("tidyverse")
+library("geosphere")
+library(data.table)
+```
+
+# Document description
+
+This document show all the changes and modification to clean and transform raw data from Motivate International Inc, the company which operates the City of Chicago's Divvy bicycle sharing service. This cleaned data will be used for Cyclistic, a bike-share company in Chicago. The dataset will include the last 12 months of data (2022 January to 2021 February).
+
+The license to use this public dataset can be found [here.](https://www.divvybikes.com/data-license-agreement)
+
+Goal: Understand how do annual members and casual riders use Cyclistic bikes
+differently?
+
+## 1) Combining dataset of the last 12 months
+
+### 1.1) Raw Data
+```{r data of the last 12 months}
+Jan_2022 <- read.csv("202201-divvy-tripdata.csv")
+Dec_2021 <- read.csv("202112-divvy-tripdata.csv")
+Nov_2021 <- read.csv("202111-divvy-tripdata.csv")
+Oct_2021 <- read.csv("202110-divvy-tripdata.csv")
+Sept_2021 <- read.csv("202109-divvy-tripdata.csv")
+Aug_2021 <- read.csv("202108-divvy-tripdata.csv")
+July_2021 <- read.csv("202107-divvy-tripdata.csv")
+June_2021 <- read.csv("202106-divvy-tripdata.csv")
+May_2021 <- read.csv("202105-divvy-tripdata.csv")
+Apr_2021 <- read.csv("202104-divvy-tripdata.csv")
+Mar_2021 <- read.csv("202103-divvy-tripdata.csv")
+Feb_2021 <- read.csv("202102-divvy-tripdata.csv")
+```
+
+### 1.2) Understanding data.
+Checking the data to ensure consistancy among data types of the 12 dataframe.
+```{r,  eval=FALSE}
+glimpse(Jan_2022)
+glimpse(Dec_2021)
+glimpse(Nov_2021)
+glimpse(Oct_2021)
+glimpse(Sept_2021)
+glimpse(Aug_2021)
+glimpse(July_2021)
+glimpse(June_2021)
+glimpse(May_2021)
+glimpse(Apr_2021)
+glimpse(Mar_2021)
+glimpse(Feb_2021)
+
+```
+
+### 1.3) Merging data
+Merging data of the last 12 months to obtain a dataset for a whole year. The dataset is called `Total_trips`.
+
+```{r Total_trips}
+Total_trips <- bind_rows(Jan_2022, Dec_2021, Nov_2021, Oct_2021, Sept_2021,
+                         Aug_2021, July_2021, June_2021, May_2021, Apr_2021,
+                         Mar_2021, Feb_2021)
+```
+
+Understanding `Total_trips` dataset using `glimpse()`.
+```{r}
+glimpse(Total_trips)
+```
+
+
+## 2) Prepare dataset
+
+### 2.1) Changing data type
+Changing data type for `rideable_type` and `member_casual` from **chr** to **factor**.
+```{r}
+Total_trips$rideable_type <- as.factor(Total_trips$rideable_type)
+Total_trips$member_casual <- as.factor(Total_trips$member_casual)
+
+# glimpse(Total_trips)
+```
+
+Since `started_at` and `ended_at` consist of values that are dates. We should change the data type from **chr** to **data**.
+```{r}
+Total_trips$started_at <- as.POSIXct(Total_trips$started_at, format="%Y-%m-%d %H:%M:%S")
+Total_trips$ended_at <- as.POSIXct(Total_trips$ended_at, format="%Y-%m-%d %H:%M:%S")
+```
+
+### 2.2) Adding features
+Adding a new column called `ride_length` to calculate the total duration of travel.
+```{r}
+Total_trips <- Total_trips %>%
+  mutate(ride_length = difftime(Total_trips$ended_at, Total_trips$started_at, units = "mins")) %>%
+  arrange(ride_length)
+```
+
+Adding a new column called `distance_traveled` to calculate the total distance traveled by the biker in meters.
+```{r}
+Total_trips <- Total_trips %>%
+  mutate(distance_traveled = distHaversine(cbind(Total_trips$start_lng, Total_trips$start_lat),cbind(Total_trips$end_lng, Total_trips$end_lat)))
+```
+From this analysis we are able to tell that there are some data which has negative ride_length and a distance_traveled of 0. Which needs to be remove. There is also data that needs to be fixed such as those with positive distance travel but negative duration.
+
+
+### 2.3) Catergorising data
+Create a columns called `day_of_week`. Which states the day of week which the bike was lend.
+```{r}
+Total_trips$day_of_week <- format(Total_trips$started_at, "%A")
+```
+
+
+## 3) Cleaning data
+
+### 3.1) Removing rows with distance_traveled <=0
+As shown in section *2.2* there are some invalid data in the data set that should be removed.
+```{r}
+Total_trips_clean <- Total_trips %>%
+  filter((distance_traveled > 0)) %>% 
+  arrange(ride_length)
+```
+In this data set there are rows with positive distance_traveled and negative ride_length. Hence, we are able to conclude that the start time and end time are flipped in these columns.
+```{r}
+temp <- Total_trips_clean %>% 
+  filter((ride_length < 0)) %>% 
+  mutate(temp = started_at, temp2 = ended_at) %>% 
+  mutate( started_at = temp2, ended_at = temp) 
+```
+
+Calculating a new ride_length and removing temp and temp2 columns.
+```{r}
+temp <- temp %>%
+  mutate(ride_length = difftime(ended_at, started_at, units = "mins"))
+
+temp[ , c('temp','temp2')] <- list(NULL)
+```
+
+Removing rows with ride_length <=0 and adding temp to replace those deleted rows. As ride_length = 0 indicates that the bike was not used which should be removed.
+```{r}
+Total_trips_clean <- Total_trips_clean %>% 
+  filter(ride_length>0)
+
+```
+
+Merging temp and Total_trips_clean.
+```{r}
+Total_trips_clean <- rbind(Total_trips_clean,temp)
+```
+
+### 3.2) Dealing with empty station id and name
+From the data set we are able to notice that there are some empty stations this could be valuable data that should not be deleted as they may mean that the user lend the bike from a random location rather than a station.
+
+First we would like to understand our data.
+```{r, eval=FALSE}
+Total_trips_clean %>% 
+  select(start_station_name) %>% 
+  count(start_station_name)
+```
+Creating a new dataframe for random location.
+```{r}
+random_location_trips <- Total_trips_clean %>% 
+  filter(start_station_name == "" | end_station_name == "")
+```
+
+Filtering the datavset Total_trips_clean to remove random locations.
+```{r}
+Total_trips_clean <- Total_trips_clean %>% 
+  filter(start_station_name != "" & end_station_name != "")
+```
+
+Creating a data set Total_trips_clean_random with random locations.
+```{r}
+Total_trips_clean_random <- bind_rows(Total_trips_clean, random_location_trips)
+```
+
+### 3.3) Removing test stations
+In the dataset there are some test stations. This could indicate that the bike is taken for maintenance. Hence, we would remove this data to ensure that are data is clean to understand customers usage.
+
+```{r}
+Total_trips_clean <- Total_trips_clean %>% 
+  filter(!(str_detect(start_station_name,"Test")))
+```
+
+### 3.4) Removing duplicates
+It is important to ensure that all the data is unique. For this dataset ride_id columns should be unique and duplicates should be removed.
+```{r, eval=FALSE}
+Total_trips_clean[!duplicated(Total_trips_clean$ride_id),]
+```
+
+Running this code we are able to observe that the dataset is cleaned without any duplicates.
+
+### 3.5) Catergorising member and casual riders
+To help with our analysis. Creating a dataframe for member and riders might help us to understand their differences.
+```{r members}
+member_df <- Total_trips_clean %>% 
+  filter(member_casual == "member")
+```
+
+```{r casual}
+casual_df <- Total_trips_clean %>% 
+  filter(member_casual == "casual")
+```
+
+## 4) Understanding the Data
+
+### 4.1) Biker preference
+```{r bikers preference}
+Total_trips_clean %>%
+  select(rideable_type,member_casual) %>% 
+  group_by((member_casual)) %>% 
+  count(rideable_type)
+```
+Checking biker preference for users that did not lend the bike from stations.
+```{r}
+random_location_trips %>% 
+  select(rideable_type, member_casual) %>% 
+  group_by(member_casual) %>% 
+  count(rideable_type)
+```
+As expected the data has tell us that customer who uses docked bike tend to lend them from docking stations.
+
+### 4.2) Summarising our datasets
+Now we would like to check all our prepare to confirm that they have been cleaned and gain some insights that could help us in our analysis part.
+```{r}
+summary(Total_trips_clean)
+```
+
+```{r members_sum}
+summary(member_df)
+```
+
+```{r casual_sum}
+summary(casual_df)
+```
+
+```{r random station}
+summary(random_location_trips)
+```
+
+### 5) Saving data set
+For analysis purpose we would like to save our datasets.
+```{r Total_trips_save}
+fwrite(Total_trips,"/Users/aidan.w/Documents/Google Data Analytics/Milestone project/Dataset/Past 12 months data/Cleaned data/RStudio_clean_data/Total_trips.csv", col.names = TRUE, row.names = FALSE)
+```
+
+```{r Total_trips_clean_save}
+fwrite(Total_trips_clean,"/Users/aidan.w/Documents/Google Data Analytics/Milestone project/Dataset/Past 12 months data/Cleaned data/RStudio_clean_data/Total_trips_clean.csv", col.names = TRUE, row.names = FALSE)
+```
+
+```{r random_location_trips_save}
+fwrite(random_location_trips,"/Users/aidan.w/Documents/Google Data Analytics/Milestone project/Dataset/Past 12 months data/Cleaned data/RStudio_clean_data/random_location_trips.csv", col.names = TRUE, row.names = FALSE)
+```
+
+```{r Total_trips_clean_random_save}
+fwrite(Total_trips_clean_random,"/Users/aidan.w/Documents/Google Data Analytics/Milestone project/Dataset/Past 12 months data/Cleaned data/RStudio_clean_data/Total_trips_clean_random.csv", col.names = TRUE, row.names = FALSE)
+```
+
+```{r member_df_save}
+fwrite(member_df,"/Users/aidan.w/Documents/Google Data Analytics/Milestone project/Dataset/Past 12 months data/Cleaned data/RStudio_clean_data/member_df.csv", col.names = TRUE, row.names = FALSE)
+```
+
+```{r casual_df_save}
+fwrite(casual_df,"/Users/aidan.w/Documents/Google Data Analytics/Milestone project/Dataset/Past 12 months data/Cleaned data/RStudio_clean_data/casual_df.csv", col.names = TRUE, row.names = FALSE)
+```
+

@@ -1,0 +1,160 @@
+---
+title: "Final Report"
+author: "Aidan Wong"
+date: '2022-03-04'
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1) Introduction
+
+Cyclistic is a bike-share program that was establish in 2016. The program currently has grown to a fleet of 5,824 bicycles that are geotracked and locked into a network of 692 stations across Chicago.
+
+The goal of this report is to understand **how do annual members and casual riders use Cyclistic bikes differently?** 
+
+Using our analysis as shown below in this report we would then like to tackle the business task of converting casual riders into annual members as they are deem more profitable.
+
+# 2) Data Process
+
+In this section, I would discuss the data source used and process of cleaning and manipulating the data.
+
+## 2.1) Data Source
+
+For our data sets we have select the most suitable dataset for our analysis. We then organized the data sets neatly according to their months. For our analysis, we select the data sets of the past 12 months as we would like to make our analysis with up-to-date data. Our data sets are internal data sourced from the company itself. The data set is also creditable and licensed. *[here.]*(https://www.divvybikes.com/data-license-agreement)
+
+## 2.2) Change log (Data Cleaning and manipulation)
+
+Changes
+* Merge data of 12 past months into 1 complete dataframe
+* Change data types (E.g. for `start_date` : Chr -> Date and etc)
+* Added new columns/features (E.g. `ride_length`, `distance_traveled` and `day_of_week`)
+* Cleaned the data
+  + Removed negative distance traveled
+  + Fixed negative ride length by flipping `started_at` and `ended_at` to fit the correct context.
+  + Removed test stations
+  + Check and removed duplicates
+  
+More detailed explanation of changes can be found in the Data_cleaning document.
+
+# 3) Analysis and Findings
+```{r setup analysis}
+library(tidyverse)  #helps wrangle data
+library(lubridate)  #helps wrangle date attributes
+library(ggplot2)  #helps visualize data
+library(data.table) #helps with reading and writing data
+library(dplyr)
+```
+
+```{r Extracting data}
+Total_trips_clean <- fread("Cleaned data/RStudio_clean_data/Total_trips_clean.csv")
+Total_trips <- fread("Cleaned data/RStudio_clean_data/Total_trips.csv")
+random_location_trips <- fread("Cleaned data/RStudio_clean_data/random_location_trips.csv")
+Total_trips_clean_random <- fread("Cleaned data/RStudio_clean_data/Total_trips_clean_random.csv")
+member_df <- fread("Cleaned data/RStudio_clean_data/member_df.csv")
+casual_df <- fread("Cleaned data/RStudio_clean_data/casual_df.csv")
+```
+From my analysis. There are five main areas that have been inspected.
+
+1. Distance Travel
+2. Travel duration
+3. Day of week
+4. Preference for type of bike
+5. Random Start/end location
+
+## 3.1) Distance Travel
+
+Casual riders on average have a **longer** distance traveled compare to annual members.
+```{r distance travel}
+Total_trips_clean_random %>% 
+  filter(distance_traveled < 5000)  %>% #filtering outliers that skews the 
+  # data and irrelevant data that disturbs the analysis.'
+  ggplot(aes(x = distance_traveled, color = member_casual)) +
+  geom_boxplot()
+  
+```
+
+## 3.2) Travel duration
+
+In this aspect casual riders also tend to have **longer** travel time compare to annual members.
+```{r travel duration }
+Total_trips_clean_random %>% 
+  ggplot(aes( x = ride_length, color = member_casual)) +
+  geom_boxplot() +
+  facet_wrap(~member_casual)
+```
+
+Taking a closer look
+```{r travel duration focus}
+Total_trips_clean_random %>% 
+  filter(ride_length < 25) %>% 
+  ggplot(aes( x = ride_length, color = member_casual)) +
+  geom_boxplot()
+```
+
+## 3.3) Day of Week
+
+From this analysis, we know that annual members have more consistent cycling pattern. Where as casual riders tend to cycle on the weekend and are often leisure trips.
+
+```{r day of week}
+ggplot(data= Total_trips_clean_random, aes(x = day_of_week, fill=member_casual)) +
+  geom_bar(position=position_dodge())+
+  theme_minimal()
+```
+
+## 3.4) Preference for type of bike
+
+Classic bike are often used by annual members and docked bike are only used by casual riders. Electrical bike is indifferent to rider type.
+
+```{r bike preference}
+Total_trips_clean_random %>% 
+  ggplot(aes(x = rideable_type, fill = member_casual)) +
+  geom_bar(position = position_dodge())
+```
+
+Additional Information:
+```{r bike preference extra}
+Total_trips_clean_random %>% 
+  filter(distance_traveled < 100000) %>% #removing skewed data points
+  ggplot(aes(x = distance_traveled, y = ride_length, color = rideable_type, shape = member_casual)) +
+  geom_point()
+```
+
+```{r bike preference extra 2}
+Total_trips_clean_random %>% 
+  filter(distance_traveled < 100000) %>% #removing skewed data points
+  ggplot(aes(x = distance_traveled, y = ride_length, color = rideable_type, shape = member_casual)) +
+  geom_point() +
+  facet_grid(rideable_type~member_casual)
+```
+
+## 3.5) Random start/end location
+
+Lastly, we are able to notice that riders that start at random locations are indifferent from each other.
+
+```{r random locations}
+random_location_trips %>% 
+  ggplot(aes(x = member_casual, fill= member_casual)) +
+  geom_bar()
+```
+
+
+# 4) Reccomendations
+
+As mentioned in the team's briefing we would like to convert casual riders to annual members in order to increase our profits. Below I would like to list my top 3 recommendation based on my analysis.
+
+* **1. Increase benefits for longer duration of travel**
+
+As identify in section 3.2. Casual riders tend to have a longer duration of travel and so addition of better cycling equipments suited for long travel duration could be advertise to casual riders.
+
+* **2. Nudging casual riders for the health benefits of cycling frequently**
+
+As shown in section 3.3. Casual riders tend to cycle on the weekend, often 1-day rent. Casual riders also used cycling for leisure. Hence, nudging them the health benefits of cycling can convert them to frequent riders on the weekday and leisure riders on the weekend.
+
+* **3. Promotion at docking stations**
+
+In section 3.4. We are able to notice that only casual riders use docked bike. Therefore, advertising at docking stations would target the right customers and informed them of the availability and benefits of being an annual member.

@@ -1,0 +1,207 @@
+---
+title: "Data_analysis"
+author: "Aidan Wong"
+date: '2022-03-01'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)  #helps wrangle data
+library(lubridate)  #helps wrangle date attributes
+library(ggplot2)  #helps visualize data
+library(data.table) #helps with reading and writing data
+library(dplyr)
+#getwd() #displays your working directory
+#setwd("/Users/aidan.w/Documents/Google Data Analytics/Milestone project/Dataset/Past 12 months data")
+
+
+```
+
+# Document description
+
+In this document I will preform the **analysis** step where I would analyse the data to gain valuable insights that will be able to tackle our question of how do annual members and casual riders use Cyclistic bikes differently?
+
+## 1) Loading Dataset
+In my previous cleaning data document. I have clean and stored the datasets in my local computer. To proceed to analyse the data. We would need to extract the datas.
+```{r Extracting data}
+Total_trips_clean <- fread("Cleaned data/RStudio_clean_data/Total_trips_clean.csv")
+Total_trips <- fread("Cleaned data/RStudio_clean_data/Total_trips.csv")
+random_location_trips <- fread("Cleaned data/RStudio_clean_data/random_location_trips.csv")
+Total_trips_clean_random <- fread("Cleaned data/RStudio_clean_data/Total_trips_clean_random.csv")
+member_df <- fread("Cleaned data/RStudio_clean_data/member_df.csv")
+casual_df <- fread("Cleaned data/RStudio_clean_data/casual_df.csv")
+```
+
+## 2) Descriptive Analysis
+
+To first begin our analysis we would need to inspect our dataset to find any clues or relationships.
+```{r}
+summary(Total_trips_clean)
+```
+
+```{r}
+summary(Total_trips)
+```
+
+```{r}
+summary(random_location_trips)
+```
+
+```{r}
+summary(Total_trips_clean_random)
+```
+
+```{r}
+summary(member_df)
+```
+
+```{r}
+summary(casual_df)
+```
+
+Now that we have some understanding of the datasets we will be working with. We are now able to proceed to the next time of inspecting them.
+
+Before we start inspecting the datasets. I would like to make a few hypothesis of how a casual rider may differ from an annual member. Below I have list some points that I think that will show their differences.
+
+* Distance traveled
+* Travel time
+* Day of week
+* Types of bike used
+* Random start/end of location
+
+## 3) Distance Traveled
+Hypothesis: Member will travel a longer distance compare to casual riders.
+
+```{r}
+dis_cnt <- Total_trips_clean %>% 
+  select(distance_traveled,member_casual) %>% 
+  filter(distance_traveled  < 5000) #filtering outliers and irrelevant data.
+```
+
+
+```{r}
+ggplot(dis_cnt, aes(x=distance_traveled, color=member_casual)) +
+  geom_boxplot()
+```
+From this boxplot we are able to tell that casual riders on average has a higher distance traveled compare to casual. However, this is just a small difference.
+## 4) Travel time
+
+```{r}
+time_cnt <- Total_trips_clean_random %>% 
+  select(ride_length,member_casual)
+```
+
+```{r}
+ggplot(data = time_cnt, aes(x = ride_length, color = member_casual)) +
+  geom_boxplot()+
+  facet_wrap(~member_casual) 
+```
+
+From this graph we can tell that on average casual member tend to have longer travel time than members.
+
+```{r}
+time_cnt2 <- Total_trips_clean_random %>% 
+  select(ride_length,member_casual) %>% 
+  filter(ride_length<25)
+```
+
+```{r}
+ggplot(data = time_cnt2, aes(x = ride_length, color = member_casual)) +
+  geom_boxplot()
+```
+From this next graph we are able to conclude that on average casual riders tend to spend more time cycling compare to annual members.
+
+## 5) Day of week
+In this section we would like to observe the day of week which member or casual riders tend to cycle.
+
+```{r}
+ggplot(data = Total_trips_clean_random, aes(x = day_of_week, fill = member_casual)) +
+  geom_bar() 
+
+
+```
+```{r}
+ggplot(data= Total_trips_clean_random, aes(x = day_of_week, fill=member_casual)) +
+  geom_bar(position=position_dodge())+
+  theme_minimal()
+```
+
+From this graph we are able to understand that annual members are more consistent riders. Where as casual riders on average have a lower frequency. But on Saturday and Sunday there is a higher number of casual riders compare to members. Therefore, we are able to conclude that annual members are more consistent riders where as member riders are more relax and often ride on the weekend.
+
+## 6) Preference for type of bike
+In this section we are going to inspect the type of bike annual members and casual members preferred to use.
+
+```{r}
+Total_trips_clean_random %>% 
+  ggplot(aes(x = rideable_type, fill = member_casual)) +
+  geom_bar(position = position_dodge())
+```
+
+From this visual we are able to tell that annual members tend to use the classic bike by a large difference compare to casual riders and for a smaller difference for electric bike. In addition, only casual riders would use docked bike.
+
+### Putting travel time, distance travel and type of bike used together
+
+```{r}
+Total_trips_clean_random %>% 
+  filter(distance_traveled < 100000) %>% #removing skewed data points
+  ggplot(aes(x = distance_traveled, y = ride_length, color = rideable_type, shape = member_casual)) +
+  geom_point()
+```
+From the graph above we are able to conclude that members which tend to have preference for docked bike and have a longer travel time and shorter distance traveled.
+
+```{r}
+Total_trips_clean_random %>% 
+  filter(distance_traveled < 100000) %>% #removing skewed data points
+  ggplot(aes(x = distance_traveled, y = ride_length, color = rideable_type, shape = member_casual)) +
+  geom_point() +
+  facet_grid(rideable_type~member_casual)
+```
+Focusing on a lower ride_length values
+```{r}
+Total_trips_clean_random %>% 
+  filter(distance_traveled < 100000, ride_length < 1500) %>% #removing skewed/distrubiting data points
+  ggplot(aes(x = distance_traveled, y = ride_length, color = rideable_type, shape = member_casual)) +
+  geom_point() +
+  facet_grid(rideable_type~member_casual)
+```
+From this graph we are able to notice that electric bike tend to have the least amount of ride time. We are also able to notice that on average casual riders tend to travel a longer distance using classic bikes.
+
+## 7) Random Start/End location
+In this last section we would like to analyse the location of riders and determine whether there is a relationship between riders start of journey and end of journey to their subscription.
+
+Hypothesis: Casual riders tend to start at random location most often compare to annual members
+
+```{r}
+random_location_trips %>% 
+  ggplot(aes(x = member_casual, fill= member_casual)) +
+  geom_bar()
+
+```
+
+```{r}
+Total_trips_clean %>% 
+  ggplot(aes(x = member_casual, fill = member_casual)) +
+  geom_bar()
+```
+
+Here we can tell that riders subscription is indifferent for random locations (I.e locations without IDs, random spots). From the second graph we are able to notice that more member tend to start at locations that are identify stations but we also need to take into account that there is a larger number of members hence, it could be said that there is indifference.
+
+## 8) Summary
+
+To summarize everything there are four factors that differentiate casual riders with annual member riders.
+
+### 1. Distance Travel
+Casual riders have a longer distance traveled compare to members.
+
+### 2. Travel time
+In this aspect casual riders also tend to have longer travel time compare to members.
+
+### 3. Day of week
+From the analysis above we know that annual members have more consistent cycling pattern. Where as casual riders tend to cycle on the weekend and are often leisure riders.
+
+### 4. Type of bike
+From the visuals above we know that classic bike are often used by annual members and docked bike are used by casual riders only.
+
+### 5. Random Start/end Location
+Lastly, we are able to notice that riders that start at random locations are indifferent from each other.
